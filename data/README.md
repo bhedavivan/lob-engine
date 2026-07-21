@@ -1,9 +1,19 @@
 # Data — capture and CSV contract
 
-`capture_feed.py` records a live feed from Coinbase's public market-data
-WebSocket into a flat CSV that the C++ engine replays. It subscribes to two
-channels (no API key required): `level2_batch` for the order book and `matches`
-for trade prints.
+`capture_feed.py` records a live feed from a public exchange WebSocket into a
+flat CSV that the C++ engine replays. No API key required. Two exchanges are
+supported behind the one CSV format via `--exchange`:
+
+- **`coinbase`** (default) — `level2_batch` book + `matches` trades.
+- **`kraken`** — `book` (depth 25) + `trade`.
+
+`--symbol` takes a canonical name (`BTC-USD`, `ETH-USD`, `SOL-USD`, `XRP-USD`,
+`LTC-USD`, `DOGE-USD`) and translates it per exchange (e.g. Kraken's `XBT/USD`).
+Capturing the same symbol from both venues is a quick way to cross-check prices.
+The live browser dashboard ([`dashboard/live.html`](../dashboard/)) adds
+Binance.US as a third source; Binance's partial-depth stream suits the live
+viewer but not the incremental C++ pipeline, so the capturer sticks to the two
+venues that stream true snapshot+delta books.
 
 ## CSV schema
 
@@ -28,7 +38,8 @@ against real trades.
 
 ```bash
 pip install -r requirements.txt
-python capture_feed.py --product BTC-USD --seconds 60 --out sample.csv
+python capture_feed.py --exchange coinbase --symbol BTC-USD --seconds 60 --out sample.csv
+python capture_feed.py --exchange kraken   --symbol ETH-USD --seconds 60 --out eth.csv
 ```
 
 `sample_head.csv` (committed) is the first 400 rows of a real BTC-USD capture,

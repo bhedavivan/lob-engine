@@ -1,16 +1,33 @@
-# Dashboard — order book, live-replayed
+# Dashboard
 
-A single self-contained HTML page that visualizes a real captured session: an
-animated order-book **depth ladder**, **mid / microprice** with trade prints,
-the **spread**, and the **order-book imbalance** signal — with a cursor tying
-the time series to the depth snapshot on screen. No server, no build step, no
-external libraries, fonts, or network calls; all data is inlined, so it opens
-straight from disk or GitHub Pages.
+Two self-contained HTML pages, no server and no external libraries:
+
+- **`live.html`** — a **live** order book you can actually use. Pick an exchange
+  (Coinbase, Kraken, Binance.US) and a coin (BTC, ETH, SOL, XRP, LTC, DOGE) and
+  it connects straight from the browser to that exchange's public market-data
+  WebSocket, reconstructs the book in real time, and shows a depth ladder, best
+  bid/ask/spread, order-flow imbalance, a mid-price sparkline, and a trade tape.
+  No API key. Open the file and it auto-connects to Coinbase BTC.
+- **`dashboard.html`** — a **replay** of a captured session, built from the C++
+  engine's emitted streams (below). The reconstruction logic in `live.html` is
+  the browser twin of the C++ engine — the engine is the fast, unit-tested
+  version that feeds the backtests and ML.
+
+Because two venues are a click apart, you can watch the same coin on Coinbase
+and Kraken side by side and see their prices differ — the simplest form of
+cross-source sanity checking.
+
+## Replay dashboard
+
+`dashboard.html` visualizes a real captured session: an animated order-book
+**depth ladder**, **mid / microprice** with trade prints, the **spread**, and
+the **order-book imbalance** signal — with a cursor tying the time series to the
+depth snapshot on screen. All data is inlined, so it opens straight from disk.
 
 ![dashboard preview](dashboard_preview.png)
 
-*(Static poster above; `dashboard.html` is the interactive version — press Play
-or drag the slider to scrub through the session.)*
+*(Static poster above; `dashboard.html` is interactive — press Play or drag the
+slider to scrub through the session.)*
 
 ## How it's built
 

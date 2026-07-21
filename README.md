@@ -6,9 +6,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 A limit order book reconstruction engine in C++, fed by real market data from
-a live crypto exchange. It ingests an L2 feed, rebuilds the full book in
-memory, and exposes top-of-book, depth, and order-flow-imbalance signals — the
-substrate a backtester or market-making strategy runs on top of.
+live crypto exchanges (Coinbase, Kraken, Binance.US). It ingests an L2 feed,
+rebuilds the full book in memory, and exposes top-of-book, depth, and
+order-flow-imbalance signals — the substrate a backtester or market-making
+strategy runs on top of.
 
 Built as a systems project: the interesting problems here are correctness
 under a high-rate incremental feed and doing the per-event book maintenance
@@ -43,6 +44,10 @@ fast enough to keep up.
 - **v7 — live streaming + CI** (done): the engine reads a live feed over a pipe
   (`capture_feed.py --stream | lob_engine -`), and GitHub Actions builds the
   C++ on Linux and Windows, runs both test suites, and smoke-runs the Python.
+- **v8 — multi-exchange + live dashboard** (done): the capturer and a live
+  browser dashboard support **Coinbase, Kraken, and Binance.US**, with an
+  exchange + coin selector. [`dashboard/live.html`](dashboard/) connects
+  straight from the browser and reconstructs any of six coins live.
 
 ![dashboard preview](dashboard/dashboard_preview.png)
 
@@ -139,10 +144,10 @@ can't prove is behavior-preserving is a bug waiting to happen.
 
 ```
 engine/     C++ order book, replay CLI, feature + event emit, benchmark, tests
-data/       Python live-feed capture (book + trades) + CSV contract + samples
+data/       multi-exchange live-feed capture (Coinbase/Kraken) + CSV contract
 backtest/   Python taker signal backtester + passive market-maker + metrics
 ml/         mid-price direction classifier, walk-forward evaluated
-dashboard/  self-contained HTML dashboard (depth ladder + signals + trades)
+dashboard/  live browser dashboard (3 exchanges) + replay dashboard
 ```
 
 ## Build and run

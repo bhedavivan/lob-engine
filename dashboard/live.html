@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lob-engine — live order book</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--text:#e6edf3;--muted:#8b949e;
+    --bid:#3fb950;--ask:#f85149;--mid:#58a6ff;--accent:#d29922;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  header{padding:16px 22px;border-bottom:1px solid var(--line);display:flex;
+    flex-wrap:wrap;align-items:center;gap:14px;}
+  h1{margin:0;font-size:16px;letter-spacing:.3px;white-space:nowrap;}
+  select,button{background:#21262d;color:var(--text);border:1px solid var(--line);
+    border-radius:6px;padding:7px 10px;font:inherit;cursor:pointer;}
+  button:hover,select:hover{border-color:var(--mid);}
+  .status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);margin-left:auto;}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);}
+  .dot.on{background:var(--bid);box-shadow:0 0 6px var(--bid);}
+  .dot.err{background:var(--ask);}
+  .wrap{display:grid;grid-template-columns:minmax(300px,1fr) minmax(320px,1.3fr);
+    gap:16px;padding:16px;max-width:1180px;margin:0 auto;}
+  @media(max-width:800px){.wrap{grid-template-columns:1fr;}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;}
+  .panel h2{margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.8px;
+    color:var(--muted);font-weight:600;}
+  .quote{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;}
+  .mid{font-size:30px;font-weight:600;}
+  .spread{font-size:12px;color:var(--muted);text-align:right;}
+  .ladder{font-size:12px;line-height:1.5;}
+  .row{position:relative;display:flex;justify-content:space-between;padding:1px 6px;z-index:1;}
+  .row .bar{position:absolute;top:0;bottom:0;right:0;z-index:-1;opacity:.22;border-radius:2px;}
+  .row.a .bar{background:var(--ask);left:0;right:auto;}
+  .row.b .bar{background:var(--bid);}
+  .row .px{font-variant-numeric:tabular-nums;}
+  .row.a .px{color:var(--ask);} .row.b .px{color:var(--bid);}
+  .imbwrap{height:20px;background:#21262d;border-radius:5px;overflow:hidden;position:relative;margin-top:4px;}
+  .imbbar{position:absolute;top:0;bottom:0;left:50%;background:var(--mid);}
+  .imbmid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--muted);}
+  .tape{font-size:12px;max-height:210px;overflow:hidden;}
+  .tape .t{display:flex;justify-content:space-between;padding:1px 4px;font-variant-numeric:tabular-nums;}
+  .tape .buy{color:var(--bid);} .tape .sell{color:var(--ask);}
+  svg text{fill:var(--muted);font-size:10px;}
+  .note{padding:0 22px 18px;max-width:1180px;margin:0 auto;color:var(--muted);font-size:12px;}
+  .note code{color:var(--text);}
+</style>
+</head>
+<body>
+<header>
+  <h1>lob-engine · live book</h1>
+  <select id="exchange">
+    <option value="coinbase">Coinbase</option>
+    <option value="kraken">Kraken</option>
+    <option value="binance">Binance.US</option>
+  </select>
+  <select id="symbol">
+    <option>BTC</option><option>ETH</option><option>SOL</option>
+    <option>XRP</option><option>LTC</option><option>DOGE</option>
+  </select>
+  <button id="toggle">Connect</button>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">idle</span></div>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <h2>Order book</h2>
+    <div class="quote">
+      <div class="mid" id="mid">—</div>
+      <div class="spread">bid <span id="bid">—</span><br>ask <span id="ask">—</span><br>spread <span id="spr">—</span></div>
+    </div>
+    <div class="ladder" id="ladder"></div>
+  </div>
+  <div>
+    <div class="panel" style="margin-bottom:16px;">
+      <h2>Order-book imbalance (top 10)</h2>
+      <div class="imbwrap"><div class="imbmid"></div><div class="imbbar" id="imbbar"></div></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px;">
+        <span id="imbval">0.00</span> &nbsp;(&lt;0 sell pressure · &gt;0 buy pressure)</div>
+    </div>
+    <div class="panel" style="margin-bottom:16px;">
+      <h2>Mid price</h2>
+      <svg id="spark" viewBox="0 0 420 90" width="100%"></svg>
+    </div>
+    <div class="panel">
+      <h2>Trades</h2>
+      <div class="tape" id="tape"></div>
+    </div>
+  </div>
+</div>
+<div class="note">
+  Connects straight from your browser to each exchange's public market-data
+  WebSocket and reconstructs the book live — no server, no API key. The same
+  reconstruction runs fast and unit-tested in the C++ engine
+  (<code>engine/</code>), which is what feeds the backtests and ML. Data is
+  informational only.
+</div>
+
+<script>
+const SYMBOLS = {
+  BTC:{coinbase:"BTC-USD",kraken:"XBT/USD",binance:"btcusdt"},
+  ETH:{coinbase:"ETH-USD",kraken:"ETH/USD",binance:"ethusdt"},
+  SOL:{coinbase:"SOL-USD",kraken:"SOL/USD",binance:"solusdt"},
+  XRP:{coinbase:"XRP-USD",kraken:"XRP/USD",binance:"xrpusdt"},
+  LTC:{coinbase:"LTC-USD",kraken:"LTC/USD",binance:"ltcusdt"},
+  DOGE:{coinbase:"DOGE-USD",kraken:"XDG/USD",binance:"dogeusdt"},
+};
+
+// Normalized book: two maps price(number)->size(number). Helpers set/remove.
+function setLevel(map, px, sz){ if(sz>0) map.set(px,sz); else map.delete(px); }
+
+const EXCHANGES = {
+  coinbase:{
+    url:()=>"wss://ws-feed.exchange.coinbase.com",
+    sub:sym=>[{type:"subscribe",product_ids:[sym],channels:["level2_batch","matches"]}],
+    onMsg(raw,bk,onTrade){
+      const m=JSON.parse(raw);
+      if(m.type==="snapshot"){ bk.bids.clear(); bk.asks.clear();
+        for(const [p,s] of m.bids) bk.bids.set(+p,+s);
+        for(const [p,s] of m.asks) bk.asks.set(+p,+s); }
+      else if(m.type==="l2update"){ for(const [side,p,s] of m.changes)
+        setLevel(side==="buy"?bk.bids:bk.asks,+p,+s); }
+      else if(m.type==="match"){ onTrade(+m.price, m.side==="buy"?"sell":"buy"); }
+    }
+  },
+  kraken:{
+    url:()=>"wss://ws.kraken.com",
+    sub:sym=>[
+      {event:"subscribe",pair:[sym],subscription:{name:"book",depth:25}},
+      {event:"subscribe",pair:[sym],subscription:{name:"trade"}}],
+    onMsg(raw,bk,onTrade){
+      const m=JSON.parse(raw);
+      if(!Array.isArray(m)) return;                 // skip heartbeat/status dicts
+      const chan=m[m.length-2], payload=m[1];
+      if(typeof chan==="string" && chan.startsWith("book")){
+        if(payload.as||payload.bs){                 // snapshot
+          bk.bids.clear(); bk.asks.clear();
+          (payload.bs||[]).forEach(e=>bk.bids.set(+e[0],+e[1]));
+          (payload.as||[]).forEach(e=>bk.asks.set(+e[0],+e[1]));
+        }
+        (payload.b||[]).forEach(e=>setLevel(bk.bids,+e[0],+e[1]));
+        (payload.a||[]).forEach(e=>setLevel(bk.asks,+e[0],+e[1]));
+      } else if(chan==="trade"){
+        for(const t of payload) onTrade(+t[0], t[3]==="b"?"buy":"sell");
+      }
+    }
+  },
+  binance:{
+    url:sym=>`wss://stream.binance.us:9443/stream?streams=${sym}@depth10@100ms/${sym}@trade`,
+    sub:()=>[],
+    onMsg(raw,bk,onTrade){
+      const m=JSON.parse(raw); const d=m.data; if(!d) return;
+      if(m.stream.includes("@depth")){                // full top-10 refresh
+        bk.bids.clear(); bk.asks.clear();
+        d.bids.forEach(([p,q])=>{ if(+q>0) bk.bids.set(+p,+q); });
+        d.asks.forEach(([p,q])=>{ if(+q>0) bk.asks.set(+p,+q); });
+      } else if(m.stream.includes("@trade")){
+        onTrade(+d.p, d.m?"sell":"buy");              // m=buyer is maker => seller aggressed
+      }
+    }
+  }
+};
+
+let ws=null, book={bids:new Map(),asks:new Map()}, trades=[], spark=[], connected=false;
+const $=id=>document.getElementById(id);
+
+function setStatus(cls,txt){ const d=$("dot"); d.className="dot"+(cls?" "+cls:""); $("statusText").textContent=txt; }
+
+function connect(){
+  disconnect();
+  book={bids:new Map(),asks:new Map()}; trades=[]; spark=[];
+  const exId=$("exchange").value, coin=$("symbol").value, sym=SYMBOLS[coin][exId];
+  const ex=EXCHANGES[exId];
+  setStatus("", "connecting "+coin+"…");
+  try{ ws=new WebSocket(ex.url(sym)); }catch(e){ setStatus("err","bad URL"); return; }
+  ws.onopen=()=>{ ex.sub(sym).forEach(s=>ws.send(JSON.stringify(s))); connected=true;
+    setStatus("on", $("exchange").selectedOptions[0].text+" · "+coin+" live"); $("toggle").textContent="Disconnect"; };
+  ws.onmessage=ev=>{ try{ ex.onMsg(ev.data, book, onTrade); }catch(e){} };
+  ws.onerror=()=>setStatus("err","connection error");
+  ws.onclose=()=>{ if(connected) setStatus("","disconnected"); connected=false; $("toggle").textContent="Connect"; };
+}
+function disconnect(){ if(ws){ connected=false; try{ws.close();}catch(e){} ws=null; } $("toggle").textContent="Connect"; }
+function onTrade(px,side){ trades.unshift({px,side,t:Date.now()}); if(trades.length>40) trades.pop(); }
+
+function fmt(n){ if(n>=1000) return n.toFixed(2); if(n>=1) return n.toFixed(3); return n.toFixed(5); }
+
+function render(){
+  const bids=[...book.bids.entries()].sort((a,b)=>b[0]-a[0]);
+  const asks=[...book.asks.entries()].sort((a,b)=>a[0]-b[0]);
+  if(bids.length&&asks.length){
+    const bb=bids[0][0], ba=asks[0][0], mid=(bb+ba)/2;
+    $("mid").textContent=fmt(mid); $("bid").textContent=fmt(bb);
+    $("ask").textContent=fmt(ba); $("spr").textContent=fmt(ba-bb);
+    const N=12, top=asks.slice(0,N), tb=bids.slice(0,N);
+    const maxSz=Math.max(...top.map(l=>l[1]),...tb.map(l=>l[1]),1e-9);
+    let html="";
+    for(let i=top.length-1;i>=0;i--){ const [p,s]=top[i];
+      html+=`<div class="row a"><span class="bar" style="width:${(s/maxSz*100).toFixed(0)}%"></span><span class="px">${fmt(p)}</span><span>${s.toFixed(4)}</span></div>`; }
+    html+=`<div class="row" style="justify-content:center;color:var(--muted);padding:3px;">— ${fmt(mid)} —</div>`;
+    for(const [p,s] of tb){
+      html+=`<div class="row b"><span class="bar" style="width:${(s/maxSz*100).toFixed(0)}%"></span><span class="px">${fmt(p)}</span><span>${s.toFixed(4)}</span></div>`; }
+    $("ladder").innerHTML=html;
+    // imbalance top 10
+    const bd=tb.slice(0,10).reduce((a,l)=>a+l[1],0), ad=top.slice(0,10).reduce((a,l)=>a+l[1],0);
+    const imb=(bd+ad)>0?(bd-ad)/(bd+ad):0;
+    $("imbbar").style.width=Math.abs(imb)*50+"%";
+    $("imbbar").style.left=imb>=0?"50%":(50+imb*50)+"%";
+    $("imbbar").style.background=imb>=0?"var(--bid)":"var(--ask)";
+    $("imbval").textContent=imb.toFixed(3);
+    spark.push(mid); if(spark.length>140) spark.shift();
+    drawSpark();
+  }
+  // trade tape
+  $("tape").innerHTML=trades.map(t=>`<div class="t ${t.side}"><span>${t.side==="buy"?"▲":"▼"} ${fmt(t.px)}</span><span>${new Date(t.t).toLocaleTimeString()}</span></div>`).join("");
+}
+function drawSpark(){
+  if(spark.length<2){ $("spark").innerHTML=""; return; }
+  const lo=Math.min(...spark), hi=Math.max(...spark), W=420,H=90,pad=10;
+  const x=i=>pad+i/(spark.length-1)*(W-2*pad);
+  const y=v=>(H-pad)-(v-lo)/((hi-lo)||1)*(H-2*pad);
+  let d=""; spark.forEach((v,i)=>d+=(i?"L":"M")+x(i).toFixed(1)+" "+y(v).toFixed(1)+" ");
+  $("spark").innerHTML=`<path d="${d}" fill="none" stroke="var(--mid)" stroke-width="1.4"/>`
+    +`<text x="2" y="12">${fmt(hi)}</text><text x="2" y="${H-2}">${fmt(lo)}</text>`;
+}
+
+$("toggle").onclick=()=>{ connected||ws ? disconnect()+setStatus("","idle") : connect(); };
+$("exchange").onchange=()=>{ if(connected) connect(); };
+$("symbol").onchange=()=>{ if(connected) connect(); };
+setInterval(render, 120);
+connect();  // auto-connect to the default (Coinbase · BTC) on load
+</script>
+</body>
+</html>
