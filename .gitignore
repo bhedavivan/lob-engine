@@ -1,0 +1,25 @@
+# Build output
+engine/build/
+*.obj
+*.lib
+*.exe
+*.pdb
+*.ilk
+
+# Captured market data (regenerate with data/capture_feed.py)
+data/*.csv
+!data/sample_head.csv
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editor / OS / tooling
+.vscode/
+.idea/
+.claude/
+.claude.json
+.DS_Store
+Thumbs.db
