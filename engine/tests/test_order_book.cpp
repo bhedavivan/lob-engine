@@ -84,6 +84,32 @@ static void test_imbalance_respects_depth_cutoff() {
     assert(close(book.imbalance(1), 0.0));
 }
 
+static void test_microprice_equals_mid_when_sizes_equal() {
+    OrderBook book;
+    book.apply_snapshot_level(Side::Bid, 100.0, 3.0);
+    book.apply_snapshot_level(Side::Ask, 101.0, 3.0);
+    // Equal sizes -> microprice collapses to the plain mid.
+    assert(close(book.microprice(), 100.5));
+}
+
+static void test_microprice_leans_toward_thin_side() {
+    OrderBook book;
+    book.apply_snapshot_level(Side::Bid, 100.0, 9.0);   // heavy bid
+    book.apply_snapshot_level(Side::Ask, 101.0, 1.0);   // thin ask
+    // Buy pressure -> fair price pushed up toward the ask, above the mid.
+    double mp = book.microprice();
+    assert(mp > 100.5 && mp < 101.0);
+    // Exact: (100*1 + 101*9) / 10 = 100.9
+    assert(close(mp, 100.9));
+}
+
+static void test_microprice_one_sided_and_empty() {
+    OrderBook book;
+    assert(close(book.microprice(), 0.0));   // empty
+    book.apply_snapshot_level(Side::Bid, 100.0, 2.0);
+    assert(close(book.microprice(), 100.0));  // bid-only -> best bid
+}
+
 int main() {
     test_empty_book_has_no_top();
     test_snapshot_then_top_of_book();
@@ -92,6 +118,9 @@ int main() {
     test_snapshot_ignores_zero_size_levels();
     test_imbalance_direction_and_bounds();
     test_imbalance_respects_depth_cutoff();
+    test_microprice_equals_mid_when_sizes_equal();
+    test_microprice_leans_toward_thin_side();
+    test_microprice_one_sided_and_empty();
     std::printf("All order_book tests passed.\n");
     return 0;
 }

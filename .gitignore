@@ -6,9 +6,12 @@ engine/build/
 *.pdb
 *.ilk
 
-# Captured market data (regenerate with data/capture_feed.py)
+# Captured market data (regenerate with data/capture_feed.py) and emitted
+# feature streams (regenerate with lob_engine --emit). Small real samples are
+# committed so the engine and backtester run out of the box.
 data/*.csv
 !data/sample_head.csv
+!data/features_sample.csv
 
 # Python
 __pycache__/
@@ -16,10 +19,8 @@ __pycache__/
 .venv/
 venv/
 
-# Editor / OS / tooling
+# Editor / OS
 .vscode/
 .idea/
-.claude/
-.claude.json
 .DS_Store
 Thumbs.db

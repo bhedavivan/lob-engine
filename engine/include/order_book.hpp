@@ -48,6 +48,13 @@ public:
     // `depth` levels; 0.0 when both sides are empty. Positive = buy pressure.
     double imbalance(std::size_t depth) const;
 
+    // Size-weighted fair price: (bid*ask_size + ask*bid_size) / (bid_size +
+    // ask_size). Heavier size resting on the bid pulls it toward the ask,
+    // because that size is the harder wall to cross. Falls back to the plain
+    // mid when top-of-book sizes are zero, and to whichever side exists when
+    // the book is one-sided. Returns 0.0 on an empty book.
+    double microprice() const;
+
     std::size_t bid_levels() const { return bids_.size(); }
     std::size_t ask_levels() const { return asks_.size(); }
 

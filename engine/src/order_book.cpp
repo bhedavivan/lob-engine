@@ -68,4 +68,16 @@ double OrderBook::imbalance(std::size_t depth) const {
     return (bd - ad) / denom;
 }
 
+double OrderBook::microprice() const {
+    TopOfBook top = top_of_book();
+    if (!top.has_bid && !top.has_ask) return 0.0;
+    if (!top.has_ask) return top.best_bid;
+    if (!top.has_bid) return top.best_ask;
+
+    double size_sum = top.best_bid_size + top.best_ask_size;
+    double mid = 0.5 * (top.best_bid + top.best_ask);
+    if (size_sum <= 0.0) return mid;
+    return (top.best_bid * top.best_ask_size + top.best_ask * top.best_bid_size) / size_sum;
+}
+
 }  // namespace lob
