@@ -216,12 +216,23 @@ function render(){
 }
 function drawSpark(){
   if(spark.length<2){ $("spark").innerHTML=""; return; }
-  const lo=Math.min(...spark), hi=Math.max(...spark), W=420,H=90,pad=10;
+  const W=420,H=90,pad=12;
+  const dataLo=Math.min(...spark), dataHi=Math.max(...spark), c=(dataLo+dataHi)/2;
+  // The y-axis tracks the window's min/max, but with two guards so the line
+  // never pins flat against a boundary: (1) a minimum visible range, so a
+  // momentarily flat price sits centered instead of stuck on an edge and a
+  // single tick isn't amplified to fill the panel; (2) headroom, so crossing to
+  // a new high/low pulls the line toward — but not onto — the border.
+  let lo=dataLo, hi=dataHi;
+  const minRange=Math.max(c*0.0005, 1e-6);
+  if(hi-lo<minRange){ lo=c-minRange/2; hi=c+minRange/2; }
+  const head=(hi-lo)*0.10; lo-=head; hi+=head;
+  const range=hi-lo;
   const x=i=>pad+i/(spark.length-1)*(W-2*pad);
-  const y=v=>(H-pad)-(v-lo)/((hi-lo)||1)*(H-2*pad);
+  const y=v=>(H-pad)-(v-lo)/range*(H-2*pad);
   let d=""; spark.forEach((v,i)=>d+=(i?"L":"M")+x(i).toFixed(1)+" "+y(v).toFixed(1)+" ");
   $("spark").innerHTML=`<path d="${d}" fill="none" stroke="var(--mid)" stroke-width="1.4"/>`
-    +`<text x="2" y="12">${fmt(hi)}</text><text x="2" y="${H-2}">${fmt(lo)}</text>`;
+    +`<text x="2" y="12">${fmt(dataHi)}</text><text x="2" y="${H-2}">${fmt(dataLo)}</text>`;
 }
 
 $("toggle").onclick=()=>{ connected||ws ? disconnect()+setStatus("","idle") : connect(); };
