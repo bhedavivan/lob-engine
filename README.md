@@ -5,15 +5,18 @@
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-A limit order book reconstruction engine in C++, fed by real market data from
-live crypto exchanges (Coinbase, Kraken, Binance.US). It ingests an L2 feed,
-rebuilds the full book in memory, and exposes top-of-book, depth, and
-order-flow-imbalance signals — the substrate a backtester or market-making
-strategy runs on top of.
+A limit order book reconstruction engine in C++, fed by live market data from
+three crypto exchanges (Coinbase, Kraken, Binance.US). It ingests a Level-2
+feed, rebuilds the full book in memory under a high-rate stream of incremental
+updates, and exposes top-of-book, depth, and order-flow-imbalance signals — the
+substrate the backtests, the market-making simulation, and the live dashboard
+all run on.
 
-Built as a systems project: the interesting problems here are correctness
-under a high-rate incremental feed and doing the per-event book maintenance
-fast enough to keep up.
+This is a low-level systems and market-microstructure project. The hard parts
+are correctness under a relentless incremental feed and keeping per-event book
+maintenance fast enough to stay ahead of it — so a good share of the work is
+profiling and optimizing the hot path, and proving the fast version stays
+byte-for-byte identical to a plain reference implementation.
 
 ```
 [ Coinbase L2 WebSocket ] --> capture_feed.py --> feed.csv --> [ C++ OrderBook ] --> top-of-book / depth / imbalance
