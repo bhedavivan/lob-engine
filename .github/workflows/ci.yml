@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  cpp:
+    name: C++ build & tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S engine -B engine/build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build engine/build --config Release
+      - name: Test
+        run: ctest --test-dir engine/build --output-on-failure -C Release
+
+  python:
+    name: Python research layer (smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install -r backtest/requirements.txt -r ml/requirements.txt
+      - name: Backtest (taker + market maker)
+        run: |
+          python backtest/backtest.py data/features_sample.csv --signal imb1 --horizon 50
+          python backtest/market_maker.py data/events_sample.csv --qty 0.1 --inv-cap 1.0
+      - name: ML walk-forward
+        run: python ml/train.py data/features_ml_sample.csv --horizon 50 --folds 3
+      - name: Dashboard build
+        run: |
+          python dashboard/build_dashboard.py --depth data/depth_sample.csv \
+            --features data/features_sample.csv --out /tmp/dashboard.html
+          test -s /tmp/dashboard.html

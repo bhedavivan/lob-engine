@@ -1,5 +1,10 @@
 # lob-engine
 
+[![CI](https://github.com/bhedavivan/lob-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/bhedavivan/lob-engine/actions/workflows/ci.yml)
+![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C)
+![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+
 A limit order book reconstruction engine in C++, fed by real market data from
 a live crypto exchange. It ingests an L2 feed, rebuilds the full book in
 memory, and exposes top-of-book, depth, and order-flow-imbalance signals — the
@@ -35,6 +40,9 @@ fast enough to keep up.
 - **v6 — dashboard** (done): a self-contained HTML page (no server, no
   libraries) that replays a captured session — animated depth ladder, mid /
   microprice with trades, spread, and imbalance. See [dashboard/](dashboard/).
+- **v7 — live streaming + CI** (done): the engine reads a live feed over a pipe
+  (`capture_feed.py --stream | lob_engine -`), and GitHub Actions builds the
+  C++ on Linux and Windows, runs both test suites, and smoke-runs the Python.
 
 ![dashboard preview](dashboard/dashboard_preview.png)
 
@@ -151,6 +159,9 @@ ctest --test-dir build --output-on-failure     # unit tests
 # Replay the committed real-data sample:
 ./build/lob_engine ../data/sample_head.csv --depth 10 --every 100
 
+# Or run it live: stream the exchange feed straight into the engine
+python ../data/capture_feed.py --stream | ./build/lob_engine - --every 500
+
 # Benchmark (build with optimizations for meaningful numbers):
 cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
 cmake --build build-release
@@ -187,14 +198,17 @@ and the dashboard (v6). Directions that would deepen it further:
   ring-buffer window that re-bases as the touch drifts, and cache-line-aware
   packing, would push it further. Add per-op percentile timing (p50/p99), not
   just averages.
-- **Live in-process path** — collapse capture→replay into a single process
-  reading the socket straight into the book, and stream the dashboard live.
+- **Fully in-process live path** — the engine already reads a live feed over a
+  pipe (`--stream | lob_engine -`); folding the socket into the C++ binary (a
+  WebSocket/TLS client) and streaming the dashboard live is the next step.
 
 ## Known limitations
 
 - Single product, single feed source (Coinbase). No cross-exchange view.
-- Replay is single-threaded and reads a full CSV; there's no live in-process
-  socket→book path yet (capture and replay are separate steps).
+- The live path is a Unix pipe (`capture_feed.py --stream | lob_engine -`),
+  not a single in-process binary — the C++ engine reads the feed from stdin
+  rather than owning the socket itself (which would need a C++ WebSocket/TLS
+  client). Replay is single-threaded.
 - No sequence-gap handling — a real production feed needs to detect and
   recover from dropped messages; replay of a clean capture doesn't exercise
   that.

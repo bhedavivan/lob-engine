@@ -11,6 +11,7 @@
 #include <cstring>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <string>
 
 #include "order_book.hpp"
@@ -35,8 +36,9 @@ Args parse_args(int argc, char** argv) {
     Args args;
     if (argc < 2) {
         std::fprintf(stderr,
-                     "usage: %s <path-to-csv> [--depth N] [--every N] [--emit <out.csv>] "
-                     "[--emit-events <out.csv>]\n",
+                     "usage: %s <path-to-csv|-> [--depth N] [--every N] [--emit <out.csv>] "
+                     "[--emit-events <out.csv>] [--emit-depth <out.csv>]\n"
+                     "  '-' reads the feed live from stdin\n",
                      argv[0]);
         std::exit(1);
     }
@@ -66,11 +68,19 @@ Args parse_args(int argc, char** argv) {
 int main(int argc, char** argv) {
     Args args = parse_args(argc, argv);
 
-    std::ifstream in(args.path);
-    if (!in.is_open()) {
-        std::fprintf(stderr, "could not open '%s'\n", args.path.c_str());
-        return 1;
+    // A path of "-" reads the feed live from stdin, so the engine can sit at
+    // the end of a pipe: `capture_feed.py --stream | lob_engine -`.
+    std::ifstream fin;
+    std::istream* in_ptr = &std::cin;
+    if (args.path != "-") {
+        fin.open(args.path);
+        if (!fin.is_open()) {
+            std::fprintf(stderr, "could not open '%s'\n", args.path.c_str());
+            return 1;
+        }
+        in_ptr = &fin;
     }
+    std::istream& in = *in_ptr;
 
     // Optional per-event feature stream for the backtester.
     std::ofstream emit;

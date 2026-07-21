@@ -29,7 +29,7 @@ def side_code(coinbase_side: str) -> str:
     return "b" if coinbase_side == "buy" else "a"
 
 
-def capture(product: str, seconds: float, out_path: str) -> None:
+def capture(product: str, seconds: float, out_path: str, stream: bool) -> None:
     ws = create_connection(FEED_URL, timeout=15)
     subscribe = {
         "type": "subscribe",
@@ -45,8 +45,11 @@ def capture(product: str, seconds: float, out_path: str) -> None:
     snapshot_seen = False
     deadline = time.time() + seconds
 
-    with open(out_path, "w", newline="") as f:
-        writer = csv.writer(f)
+    # In --stream mode the CSV goes to stdout (so it can be piped straight into
+    # `lob_engine -`) and all status text goes to stderr to keep the pipe clean.
+    sink = sys.stdout if stream else open(out_path, "w", newline="")
+    try:
+        writer = csv.writer(sink)
         writer.writerow(["type", "side", "price", "size", "ts_ns"])
 
         while time.time() < deadline:
@@ -93,10 +96,17 @@ def capture(product: str, seconds: float, out_path: str) -> None:
                 print(f"feed error: {msg.get('message')}", file=sys.stderr)
                 break
 
+            if stream:
+                sink.flush()  # push each message down the pipe immediately
+    finally:
+        if not stream:
+            sink.close()
+
     ws.close()
     if not snapshot_seen:
         print("warning: no snapshot received", file=sys.stderr)
-    print(f"wrote {rows_written} rows to {out_path} ({trade_rows} trades)")
+    dest = "stdout" if stream else out_path
+    print(f"wrote {rows_written} rows to {dest} ({trade_rows} trades)", file=sys.stderr)
 
 
 def main() -> None:
@@ -104,8 +114,10 @@ def main() -> None:
     parser.add_argument("--product", default="BTC-USD")
     parser.add_argument("--seconds", type=float, default=60.0)
     parser.add_argument("--out", default="sample.csv")
+    parser.add_argument("--stream", action="store_true",
+                        help="write the feed to stdout for piping into `lob_engine -`")
     args = parser.parse_args()
-    capture(args.product, args.seconds, args.out)
+    capture(args.product, args.seconds, args.out, args.stream)
 
 
 if __name__ == "__main__":

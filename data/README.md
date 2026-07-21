@@ -34,3 +34,15 @@ python capture_feed.py --product BTC-USD --seconds 60 --out sample.csv
 `sample_head.csv` (committed) is the first 400 rows of a real BTC-USD capture,
 so the engine is runnable out of the box without a live connection. Full
 captures are git-ignored — regenerate them locally.
+
+## Live streaming
+
+With `--stream`, the capturer writes the feed to stdout (status text goes to
+stderr) so it can be piped straight into the engine, which reads the feed from
+stdin when given `-` as the path:
+
+```bash
+python capture_feed.py --stream | ../engine/build/lob_engine - --every 500
+```
+
+The book is then reconstructed live from the exchange with no intermediate file.
