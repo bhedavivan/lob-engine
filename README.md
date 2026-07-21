@@ -21,6 +21,9 @@ fast enough to keep up.
 - **v2 — signal backtester** (done): the C++ engine emits a per-event
   microstructure feature stream that a Python research layer backtests. First
   result below.
+- **v3 — ML classifier** (done): a logistic / gradient-boosted model on the
+  same features, evaluated walk-forward with a purge gap. Beats the
+  single-feature baseline out of sample; details in [ml/README.md](ml/README.md).
 
 See the [Roadmap](#roadmap) for what these versions deliberately do *not* do yet.
 
@@ -41,6 +44,12 @@ gross of fees and loses badly once any realistic fee applies — the cost of
 liquidity eats the edge. That gap (predictive ≠ tradable) is the point, and it
 motivates the passive market-making build next. Full method, equity curve, and
 honest caveats: [backtest/README.md](backtest/README.md).
+
+A trained model (v3) over the full feature set lifts short-horizon accuracy to
+**78.9% out of sample** (AUC 0.87, walk-forward with a purge gap), ~7 points
+above the single-feature baseline — and a linear model matches the
+gradient-boosted tree, so the signal is close to linear. The edge decays as the
+horizon lengthens. Details: [ml/README.md](ml/README.md).
 
 ## Design decisions
 
@@ -76,7 +85,7 @@ honest caveats: [backtest/README.md](backtest/README.md).
 engine/     C++ order book, replay CLI, feature emit, unit tests (CMake)
 data/       Python live-feed capture + CSV contract + real samples
 backtest/   Python imbalance-signal backtester + metrics + equity curve
-ml/         (roadmap) order-book-imbalance mid-price direction classifier
+ml/         mid-price direction classifier, walk-forward evaluated
 dashboard/  (roadmap) live depth + spread + latency view
 ```
 
@@ -113,17 +122,15 @@ python backtest/backtest.py data/features.csv --signal imb1 --plot equity.png
 
 ## Roadmap
 
-Done: the reconstruction core (v1) and the imbalance signal backtester (v2).
-Next, in order:
+Done: the reconstruction core (v1), the imbalance signal backtester (v2), and
+the walk-forward ML classifier (v3). Next, in order:
 
 - **Passive market-making backtest** — the direct follow-on from the v2 result:
   earn the spread by quoting passively instead of paying it by crossing. Needs
   the capturer to also record trade prints (Coinbase `matches` channel) so
-  fills can be modelled honestly against real trades.
-- **ML signal** — a short-horizon mid-price-direction classifier on the same
-  emitted features (gradient-boosted trees / logistic regression, not deep
-  learning — honest baselines first), evaluated walk-forward so the ML result
-  is comparable to the threshold baseline already measured.
+  fills can be modelled honestly against real trades. This is where the v3
+  model becomes *useful* rather than just accurate — as a passive quoting
+  signal, not a taker.
 - **Live dashboard** — a thin web view of the reconstructed book: depth chart,
   spread, and per-event processing latency.
 - **Latency work** — measure per-event update cost, then attack it

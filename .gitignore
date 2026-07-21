@@ -12,6 +12,7 @@ engine/build/
 data/*.csv
 !data/sample_head.csv
 !data/features_sample.csv
+!data/features_ml_sample.csv
 
 # Python
 __pycache__/
