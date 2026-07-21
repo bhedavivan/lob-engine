@@ -25,14 +25,16 @@ struct Args {
     std::string path;
     std::size_t depth = 5;
     std::size_t print_every = 500;
-    std::string emit_path;  // empty = no feature dump
+    std::string emit_path;         // empty = no per-event feature dump
+    std::string emit_events_path;  // empty = no unified quote+trade stream
 };
 
 Args parse_args(int argc, char** argv) {
     Args args;
     if (argc < 2) {
         std::fprintf(stderr,
-                     "usage: %s <path-to-csv> [--depth N] [--every N] [--emit <out.csv>]\n",
+                     "usage: %s <path-to-csv> [--depth N] [--every N] [--emit <out.csv>] "
+                     "[--emit-events <out.csv>]\n",
                      argv[0]);
         std::exit(1);
     }
@@ -44,6 +46,8 @@ Args parse_args(int argc, char** argv) {
             args.print_every = static_cast<std::size_t>(std::atoi(argv[++i]));
         } else if (std::strcmp(argv[i], "--emit") == 0 && i + 1 < argc) {
             args.emit_path = argv[++i];
+        } else if (std::strcmp(argv[i], "--emit-events") == 0 && i + 1 < argc) {
+            args.emit_events_path = argv[++i];
         }
     }
     return args;
@@ -86,6 +90,20 @@ int main(int argc, char** argv) {
                 "imb1,imb5,imb10\n";
     }
 
+    // Optional unified quote+trade event stream for the market-making sim.
+    std::ofstream emit_events;
+    if (!args.emit_events_path.empty()) {
+        emit_events.open(args.emit_events_path);
+        if (!emit_events.is_open()) {
+            std::fprintf(stderr, "could not open emit-events path '%s'\n",
+                         args.emit_events_path.c_str());
+            return 1;
+        }
+        emit_events << std::setprecision(12);
+        emit_events << "event_type,ts_ns,best_bid,best_ask,bid_size,ask_size,"
+                       "trade_price,trade_size,trade_side\n";
+    }
+
     OrderBook book;
     std::string line;
     // Skip the header row.
@@ -94,8 +112,10 @@ int main(int argc, char** argv) {
     std::size_t rows = 0;
     std::size_t snapshot_rows = 0;
     std::size_t update_rows = 0;
+    std::size_t trade_rows = 0;
     std::size_t malformed_rows = 0;
     std::size_t emitted_rows = 0;
+    std::size_t events_emitted = 0;
 
     auto start = std::chrono::steady_clock::now();
 
@@ -114,6 +134,7 @@ int main(int argc, char** argv) {
         uint64_t ts_ns = (fields.size() > 4) ? std::strtoull(fields[4].c_str(), nullptr, 10) : 0;
 
         bool is_update = false;
+        bool is_trade = false;
         if (type == "snapshot") {
             book.apply_snapshot_level(side, price, size);
             ++snapshot_rows;
@@ -121,6 +142,12 @@ int main(int argc, char** argv) {
             book.apply_update(BookUpdate{side, price, size, ts_ns});
             ++update_rows;
             is_update = true;
+        } else if (type == "trade") {
+            // A trade print does not mutate the book (the corresponding level
+            // changes arrive as their own update rows); it's carried through to
+            // the event stream so the MM sim can test its resting quotes.
+            ++trade_rows;
+            is_trade = true;
         } else {
             ++malformed_rows;
             continue;
@@ -141,6 +168,24 @@ int main(int argc, char** argv) {
             }
         }
 
+        // Unified quote+trade stream: a row per update (quote) and per trade,
+        // both stamped with the prevailing two-sided top of book.
+        if (emit_events.is_open() && (is_update || is_trade)) {
+            auto top = book.top_of_book();
+            if (top.has_bid && top.has_ask) {
+                emit_events << (is_trade ? "trade" : "quote") << ',' << ts_ns << ','
+                            << top.best_bid << ',' << top.best_ask << ',' << top.best_bid_size
+                            << ',' << top.best_ask_size << ',';
+                if (is_trade) {
+                    emit_events << price << ',' << size << ',' << fields[1];
+                } else {
+                    emit_events << "0,0,";  // no trade on a quote row
+                }
+                emit_events << '\n';
+                ++events_emitted;
+            }
+        }
+
         ++rows;
         if (args.print_every > 0 && rows % args.print_every == 0) {
             auto top = book.top_of_book();
@@ -158,14 +203,18 @@ int main(int argc, char** argv) {
 
     auto top = book.top_of_book();
     std::printf("\n--- replay complete ---\n");
-    std::printf("rows: %zu (snapshot=%zu, update=%zu, malformed=%zu)\n", rows, snapshot_rows,
-                update_rows, malformed_rows);
+    std::printf("rows: %zu (snapshot=%zu, update=%zu, trade=%zu, malformed=%zu)\n", rows,
+                snapshot_rows, update_rows, trade_rows, malformed_rows);
     std::printf("elapsed: %.4fs (%.0f rows/sec)\n", elapsed_s,
                 elapsed_s > 0 ? rows / elapsed_s : 0.0);
     std::printf("final top-of-book: bid=%.2f ask=%.2f imbalance(%zu)=%.4f\n", top.best_bid,
                 top.best_ask, args.depth, book.imbalance(args.depth));
     if (emit.is_open()) {
         std::printf("emitted %zu feature rows to %s\n", emitted_rows, args.emit_path.c_str());
+    }
+    if (emit_events.is_open()) {
+        std::printf("emitted %zu quote+trade events to %s\n", events_emitted,
+                    args.emit_events_path.c_str());
     }
     return 0;
 }

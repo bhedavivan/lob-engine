@@ -47,10 +47,48 @@ any realistic exchange fee turns it sharply negative:
 **That gap is the whole point.** A signal being predictive and a signal being
 tradable are different claims, and the distance between them is the cost of
 liquidity. It's exactly why real market-making strategies earn the spread by
-quoting passively rather than paying it by crossing — which is the next build
-on the [roadmap](../README.md#roadmap): a passive market-making backtest, once
-the capturer also records trade prints (the `matches` channel) so fills can be
-modelled honestly.
+quoting passively rather than paying it by crossing — which is the third study
+below.
+
+## 3. The other side: earn the spread (`market_maker.py`)
+
+If crossing the spread loses, does *posting* it win? `market_maker.py` runs a
+passive market maker on the unified quote+trade stream
+(`lob_engine --emit-events`): it quotes a resting bid and ask at the touch and
+is filled only when **real trades** reach it, using a queue-position fill model
+(join the back of the level's queue; a trade eats the queue ahead before it
+fills you). Inventory is capped, and P&L is marked to the mid and decomposed:
+
+> **total P&L = spread captured + inventory P&L**
+
+On a real 3-minute BTC-USD capture (1,717 trades, 390 fills):
+
+| Component | Value |
+|---|---|
+| spread captured | +0.01 bps |
+| inventory / adverse selection | +1.23 bps |
+| **net (marked to mid)** | **+1.24 bps** |
+
+The number to *not* be fooled by is the net. Almost none of it is spread — it's
+inventory. The equity curve tracks the inventory line one-for-one:
+
+![MM equity and inventory](mm_equity.png)
+
+**The honest reading:** on a penny-wide, hyper-liquid book like BTC-USD the
+spread is only ~0.0015 bps, so there is almost nothing to capture passively, and
+P&L is dominated by inventory risk — which over three minutes is just whichever
+way the price happened to drift. This isn't a market-making edge; it's a
+demonstration that **you can't evaluate one on this instrument at this time
+scale.** A real evaluation needs (a) a much longer horizon so inventory noise
+averages out, (b) a wider-spread instrument where spread capture is
+economically meaningful, and (c) inventory-skewed quoting rather than naive
+touch-joining. Those are the next steps.
+
+Taken together, the taker (pays the spread → loses to fees) and the maker
+(earns a spread too thin to matter → rides inventory noise) make the same
+point from both directions: the directional edge the [ML model](../ml/README.md)
+measures is real in *accuracy* terms but too small in *basis points* to
+monetize naively on this market.
 
 ## Honest caveats
 
@@ -69,13 +107,18 @@ modelled honestly.
 ```bash
 pip install -r requirements.txt
 
-# Runs on the committed real-data sample out of the box:
+# Signal + taker backtest on the committed real-data sample:
 python backtest.py ../data/features_sample.csv --signal imb1 --horizon 50 --threshold 0.30
 
-# Full pipeline on a fresh capture:
-python ../data/capture_feed.py --product BTC-USD --seconds 90 --out ../data/feed.csv
-../engine/build/lob_engine ../data/feed.csv --emit ../data/features.csv
+# Passive market maker on the committed quote+trade sample:
+python market_maker.py ../data/events_sample.csv --qty 0.1 --inv-cap 1.0 --plot mm_equity.png
+
+# Full pipeline on a fresh capture (records trades too):
+python ../data/capture_feed.py --product BTC-USD --seconds 180 --out ../data/feed.csv
+../engine/build/lob_engine ../data/feed.csv --emit ../data/features.csv \
+                                            --emit-events ../data/events.csv
 python backtest.py ../data/features.csv --signal imb1 --plot equity.png
+python market_maker.py ../data/events.csv --plot mm_equity.png
 ```
 
 ### Feature stream schema (`lob_engine --emit`)

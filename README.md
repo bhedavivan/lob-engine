@@ -24,6 +24,10 @@ fast enough to keep up.
 - **v3 — ML classifier** (done): a logistic / gradient-boosted model on the
   same features, evaluated walk-forward with a purge gap. Beats the
   single-feature baseline out of sample; details in [ml/README.md](ml/README.md).
+- **v4 — passive market-making backtest** (done): captures real trade prints,
+  quotes at the touch, and models fills with a queue-position model. Shows P&L
+  is dominated by inventory risk, not spread capture, on a penny-wide book —
+  the honest counterpart to the taker result.
 
 See the [Roadmap](#roadmap) for what these versions deliberately do *not* do yet.
 
@@ -50,6 +54,12 @@ A trained model (v3) over the full feature set lifts short-horizon accuracy to
 above the single-feature baseline — and a linear model matches the
 gradient-boosted tree, so the signal is close to linear. The edge decays as the
 horizon lengthens. Details: [ml/README.md](ml/README.md).
+
+And posting the spread instead of paying it (v4) doesn't rescue it either: on a
+penny-wide book the passive spread capture is ~0.01 bps, so a market maker's P&L
+is dominated by inventory risk rather than edge. The taker and the maker make
+the same point from opposite sides — the directional signal is real in accuracy
+but too thin in basis points to monetize naively here.
 
 ## Design decisions
 
@@ -82,9 +92,9 @@ horizon lengthens. Details: [ml/README.md](ml/README.md).
 ## Layout
 
 ```
-engine/     C++ order book, replay CLI, feature emit, unit tests (CMake)
-data/       Python live-feed capture + CSV contract + real samples
-backtest/   Python imbalance-signal backtester + metrics + equity curve
+engine/     C++ order book, replay CLI, feature + event emit, unit tests (CMake)
+data/       Python live-feed capture (book + trades) + CSV contract + samples
+backtest/   Python taker signal backtester + passive market-maker + metrics
 ml/         mid-price direction classifier, walk-forward evaluated
 dashboard/  (roadmap) live depth + spread + latency view
 ```
@@ -122,15 +132,14 @@ python backtest/backtest.py data/features.csv --signal imb1 --plot equity.png
 
 ## Roadmap
 
-Done: the reconstruction core (v1), the imbalance signal backtester (v2), and
-the walk-forward ML classifier (v3). Next, in order:
+Done: the reconstruction core (v1), the taker signal backtester (v2), the
+walk-forward ML classifier (v3), and the passive market-making backtest (v4).
+Next, in order:
 
-- **Passive market-making backtest** — the direct follow-on from the v2 result:
-  earn the spread by quoting passively instead of paying it by crossing. Needs
-  the capturer to also record trade prints (Coinbase `matches` channel) so
-  fills can be modelled honestly against real trades. This is where the v3
-  model becomes *useful* rather than just accurate — as a passive quoting
-  signal, not a taker.
+- **Better market-making study** — the v4 result showed BTC-USD's penny spread
+  is too thin to evaluate spread capture. Extend with inventory-skewed quoting,
+  a longer horizon so inventory noise averages out, and a wider-spread
+  instrument where the spread is economically meaningful.
 - **Live dashboard** — a thin web view of the reconstructed book: depth chart,
   spread, and per-event processing latency.
 - **Latency work** — measure per-event update cost, then attack it

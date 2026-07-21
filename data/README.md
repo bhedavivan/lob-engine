@@ -1,24 +1,28 @@
 # Data — capture and CSV contract
 
-`capture_feed.py` records a live L2 order book feed from Coinbase's public
-market-data WebSocket (`level2_batch` channel, no API key required) into a
-flat CSV that the C++ engine replays.
+`capture_feed.py` records a live feed from Coinbase's public market-data
+WebSocket into a flat CSV that the C++ engine replays. It subscribes to two
+channels (no API key required): `level2_batch` for the order book and `matches`
+for trade prints.
 
 ## CSV schema
 
-One row per book event. Header row required.
+One row per event. Header row required.
 
 | Column | Meaning |
 |---|---|
-| `type` | `snapshot` (initial book level) or `update` (incremental change) |
-| `side` | `b` = bid, `a` = ask |
-| `price` | Price level |
-| `size` | Resting size at that price. **`0` on an `update` removes the level.** |
+| `type` | `snapshot` (initial book level), `update` (incremental book change), or `trade` (a print) |
+| `side` | For book rows: `b` = bid, `a` = ask. For `trade` rows: the book side the trade **consumed** (`b` = a resting bid was hit, `a` = a resting ask was lifted). |
+| `price` | Price level (book rows) or trade price (`trade` rows) |
+| `size` | Resting size (book rows; **`0` on an `update` removes the level**) or traded size (`trade` rows) |
 | `ts_ns` | Local receive timestamp, nanoseconds since epoch |
 
 A capture opens with a burst of `snapshot` rows (the full book at connect
-time), followed by a stream of `update` rows. Replaying the file rebuilds the
-exact book state the engine saw live.
+time), then a stream of interleaved `update` and `trade` rows in receive order.
+Replaying the file rebuilds the exact book the engine saw live; `trade` rows do
+not mutate the book (the matching level changes arrive as their own `update`
+rows) — they exist so the market-making backtest can model passive fills
+against real trades.
 
 ## Capture a sample
 
