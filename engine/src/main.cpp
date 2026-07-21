@@ -11,11 +11,10 @@
 #include <cstring>
 #include <fstream>
 #include <iomanip>
-#include <sstream>
 #include <string>
-#include <vector>
 
 #include "order_book.hpp"
+#include "parse.hpp"
 
 using namespace lob;
 
@@ -51,16 +50,6 @@ Args parse_args(int argc, char** argv) {
         }
     }
     return args;
-}
-
-std::vector<std::string> split_csv_line(const std::string& line) {
-    std::vector<std::string> fields;
-    std::stringstream ss(line);
-    std::string field;
-    while (std::getline(ss, field, ',')) {
-        fields.push_back(field);
-    }
-    return fields;
 }
 
 }  // namespace
@@ -121,17 +110,17 @@ int main(int argc, char** argv) {
 
     while (std::getline(in, line)) {
         if (line.empty()) continue;
-        auto fields = split_csv_line(line);
-        if (fields.size() < 4) {
+        ParsedRow row;
+        if (!fast_parse(line, row)) {
             ++malformed_rows;
             continue;
         }
 
-        const std::string& type = fields[0];
-        Side side = (fields[1] == "b") ? Side::Bid : Side::Ask;
-        double price = std::atof(fields[2].c_str());
-        double size = std::atof(fields[3].c_str());
-        uint64_t ts_ns = (fields.size() > 4) ? std::strtoull(fields[4].c_str(), nullptr, 10) : 0;
+        const std::string_view& type = row.type;
+        Side side = (row.side == 'b') ? Side::Bid : Side::Ask;
+        double price = row.price;
+        double size = row.size;
+        uint64_t ts_ns = row.ts_ns;
 
         bool is_update = false;
         bool is_trade = false;
@@ -177,7 +166,7 @@ int main(int argc, char** argv) {
                             << top.best_bid << ',' << top.best_ask << ',' << top.best_bid_size
                             << ',' << top.best_ask_size << ',';
                 if (is_trade) {
-                    emit_events << price << ',' << size << ',' << fields[1];
+                    emit_events << price << ',' << size << ',' << row.side;
                 } else {
                     emit_events << "0,0,";  // no trade on a quote row
                 }

@@ -28,6 +28,9 @@ fast enough to keep up.
   quotes at the touch, and models fills with a queue-position model. Shows P&L
   is dominated by inventory risk, not spread capture, on a penny-wide book —
   the honest counterpart to the taker result.
+- **v5 — performance work** (done): a benchmark that isolates parse cost from
+  book-update cost, and a `from_chars` parser that cut row parsing 6.1x. See
+  [Performance](#performance).
 
 See the [Roadmap](#roadmap) for what these versions deliberately do *not* do yet.
 
@@ -89,10 +92,28 @@ but too thin in basis points to monetize naively here.
   cost-free predictive accuracy separately from post-cost PnL, because
   conflating them is how backtests lie to you.
 
+## Performance
+
+Measure before optimizing. `engine/bench` isolates the two costs in the replay
+hot path — parsing a CSV row vs applying a book update — on a real 112k-row
+capture (Release build, single core):
+
+| Stage | Before | After | |
+|---|---|---|---|
+| Parse a row (`stringstream`+`atof` → `from_chars`) | 1631 ns | **266 ns** | **6.1x** |
+| Apply a book update (`std::map`) | 392 ns | 392 ns | (unchanged) |
+
+The lesson is the point: parsing was the bottleneck at **4.2x** the cost of a
+book update, so the first optimization went there, not at the data structure
+everyone assumes is slow. `from_chars` (no locale, no allocation) is behavior-
+preserving — the benchmark checks it agrees with the old parser on every row —
+and it shifts the bottleneck onto the book update, which is now the next target
+(a flat array over the dense near-touch price region; see roadmap).
+
 ## Layout
 
 ```
-engine/     C++ order book, replay CLI, feature + event emit, unit tests (CMake)
+engine/     C++ order book, replay CLI, feature + event emit, benchmark, tests
 data/       Python live-feed capture (book + trades) + CSV contract + samples
 backtest/   Python taker signal backtester + passive market-maker + metrics
 ml/         mid-price direction classifier, walk-forward evaluated
@@ -112,6 +133,11 @@ ctest --test-dir build --output-on-failure     # unit tests
 
 # Replay the committed real-data sample:
 ./build/lob_engine ../data/sample_head.csv --depth 10 --every 100
+
+# Benchmark (build with optimizations for meaningful numbers):
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
+cmake --build build-release
+./build-release/bench ../data/sample_head.csv --repeats 8
 ```
 
 Backtest the imbalance signal on the committed feature sample:
@@ -142,8 +168,9 @@ Next, in order:
   instrument where the spread is economically meaningful.
 - **Live dashboard** — a thin web view of the reconstructed book: depth chart,
   spread, and per-event processing latency.
-- **Latency work** — measure per-event update cost, then attack it
-  (arena-allocated price levels, a flat array for the dense near-touch region).
+- **Book-update latency** — now the measured bottleneck (see Performance).
+  Attack it with a flat array over the dense near-touch price region, keeping
+  the `std::map` only for the sparse tail, and re-measure.
 
 ## Known limitations
 

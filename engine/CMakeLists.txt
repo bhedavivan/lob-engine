@@ -10,6 +10,9 @@ target_include_directories(orderbook PUBLIC include)
 add_executable(lob_engine src/main.cpp)
 target_link_libraries(lob_engine PRIVATE orderbook)
 
+add_executable(bench bench/bench.cpp)
+target_link_libraries(bench PRIVATE orderbook)
+
 enable_testing()
 add_executable(test_order_book tests/test_order_book.cpp)
 target_link_libraries(test_order_book PRIVATE orderbook)

@@ -1,5 +1,5 @@
 # Build output
-engine/build/
+engine/build*/
 *.obj
 *.lib
 *.exe
