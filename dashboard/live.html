@@ -59,7 +59,6 @@
     <option>BTC</option><option>ETH</option><option>SOL</option>
     <option>XRP</option><option>LTC</option><option>DOGE</option>
   </select>
-  <button id="toggle">Connect</button>
   <div class="status"><span class="dot" id="dot"></span><span id="statusText">idle</span></div>
 </header>
 
@@ -175,12 +174,12 @@ function connect(){
   setStatus("", "connecting "+coin+"…");
   try{ ws=new WebSocket(ex.url(sym)); }catch(e){ setStatus("err","bad URL"); return; }
   ws.onopen=()=>{ ex.sub(sym).forEach(s=>ws.send(JSON.stringify(s))); connected=true;
-    setStatus("on", $("exchange").selectedOptions[0].text+" · "+coin+" live"); $("toggle").textContent="Disconnect"; };
+    setStatus("on", $("exchange").selectedOptions[0].text+" · "+coin+" live"); };
   ws.onmessage=ev=>{ try{ ex.onMsg(ev.data, book, onTrade); }catch(e){} };
   ws.onerror=()=>setStatus("err","connection error");
-  ws.onclose=()=>{ if(connected) setStatus("","disconnected"); connected=false; $("toggle").textContent="Connect"; };
+  ws.onclose=()=>{ connected=false; };
 }
-function disconnect(){ if(ws){ connected=false; try{ws.close();}catch(e){} ws=null; } $("toggle").textContent="Connect"; }
+function disconnect(){ if(ws){ connected=false; try{ws.close();}catch(e){} ws=null; } }
 function onTrade(px,side){ trades.unshift({px,side,t:Date.now()}); if(trades.length>40) trades.pop(); }
 
 function fmt(n){ if(n>=1000) return n.toFixed(2); if(n>=1) return n.toFixed(3); return n.toFixed(5); }
@@ -235,9 +234,10 @@ function drawSpark(){
     +`<text x="2" y="12">${fmt(dataHi)}</text><text x="2" y="${H-2}">${fmt(dataLo)}</text>`;
 }
 
-$("toggle").onclick=()=>{ connected||ws ? disconnect()+setStatus("","idle") : connect(); };
-$("exchange").onchange=()=>{ if(connected) connect(); };
-$("symbol").onchange=()=>{ if(connected) connect(); };
+// Changing either dropdown immediately switches the live view to the new
+// exchange/coin — no connect button.
+$("exchange").onchange=connect;
+$("symbol").onchange=connect;
 setInterval(render, 120);
 connect();  // auto-connect to the default (Coinbase · BTC) on load
 </script>
