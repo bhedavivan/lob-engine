@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "fast_order_book.hpp"
 #include "order_book.hpp"
 #include "parse.hpp"
 
@@ -154,13 +155,37 @@ int main(int argc, char** argv) {
         }
         sink += book.imbalance(5);
     }
-    auto book_t = Clock::now() - t0;
-    double upd_ns = ns_per(std::chrono::duration_cast<std::chrono::nanoseconds>(book_t), updates);
-    std::printf("=== Order-book apply_update (isolated) ===\n");
-    std::printf("  %7.1f ns/update  (%6.2f M updates/s)\n\n", upd_ns, 1e3 / upd_ns);
+    auto map_t = Clock::now() - t0;
 
-    std::printf("takeaway: parsing was the bottleneck at %.1fx the cost of a book\n"
-                "update; from_chars closes most of that gap.\n", slow_ns / upd_ns);
+    std::size_t fast_updates = 0;
+    t0 = Clock::now();
+    for (int r = 0; r < repeats; ++r) {
+        FastOrderBook book;
+        for (const auto& e : evs) {
+            if (e.snapshot) {
+                book.apply_snapshot_level(e.side, e.price, e.size);
+            } else {
+                book.apply_update(BookUpdate{e.side, e.price, e.size, 0});
+                ++fast_updates;
+            }
+        }
+        sink += book.imbalance(5);
+    }
+    auto fast_book_t = Clock::now() - t0;
+
+    double map_ns = ns_per(std::chrono::duration_cast<std::chrono::nanoseconds>(map_t), updates);
+    double fastb_ns =
+        ns_per(std::chrono::duration_cast<std::chrono::nanoseconds>(fast_book_t), fast_updates);
+    std::printf("=== Order-book apply_update (isolated) ===\n");
+    std::printf("  std::map (tree)   : %7.1f ns/update  (%6.2f M updates/s)\n", map_ns,
+                1e3 / map_ns);
+    std::printf("  flat array        : %7.1f ns/update  (%6.2f M updates/s)\n", fastb_ns,
+                1e3 / fastb_ns);
+    std::printf("  speedup           : %5.1fx\n\n", map_ns / fastb_ns);
+
+    std::printf("takeaway: parsing was the bottleneck at %.1fx a tree book update;\n"
+                "from_chars fixed that, then the flat array attacks the update itself.\n",
+                slow_ns / map_ns);
     (void)sink;
     return 0;
 }

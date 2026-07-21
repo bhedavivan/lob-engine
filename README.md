@@ -29,8 +29,9 @@ fast enough to keep up.
   is dominated by inventory risk, not spread capture, on a penny-wide book —
   the honest counterpart to the taker result.
 - **v5 — performance work** (done): a benchmark that isolates parse cost from
-  book-update cost, and a `from_chars` parser that cut row parsing 6.1x. See
-  [Performance](#performance).
+  book-update cost, a `from_chars` parser (~5.5x on parsing), and a flat-array
+  `FastOrderBook` (~1.6x on updates) validated by a differential test against
+  the reference. See [Performance](#performance).
 
 See the [Roadmap](#roadmap) for what these versions deliberately do *not* do yet.
 
@@ -96,19 +97,30 @@ but too thin in basis points to monetize naively here.
 
 Measure before optimizing. `engine/bench` isolates the two costs in the replay
 hot path — parsing a CSV row vs applying a book update — on a real 112k-row
-capture (Release build, single core):
+capture (Release build, single core; figures vary ~10% run to run on a laptop):
 
-| Stage | Before | After | |
+| Stage | Before | After | Speedup |
 |---|---|---|---|
-| Parse a row (`stringstream`+`atof` → `from_chars`) | 1631 ns | **266 ns** | **6.1x** |
-| Apply a book update (`std::map`) | 392 ns | 392 ns | (unchanged) |
+| Parse a row (`stringstream`+`atof` → `from_chars`) | ~1900 ns | **~330 ns** | **~5.5x** |
+| Apply a book update (`std::map` tree → flat array) | ~480 ns | **~290 ns** | **~1.6x** |
 
-The lesson is the point: parsing was the bottleneck at **4.2x** the cost of a
-book update, so the first optimization went there, not at the data structure
-everyone assumes is slow. `from_chars` (no locale, no allocation) is behavior-
-preserving — the benchmark checks it agrees with the old parser on every row —
-and it shifts the bottleneck onto the book update, which is now the next target
-(a flat array over the dense near-touch price region; see roadmap).
+Two optimizations, each earned by a measurement:
+
+1. **Parsing was the real bottleneck** — ~3.8x the cost of a book update, not
+   the data structure everyone assumes is slow. `from_chars` (no locale, no
+   allocation) is behavior-preserving; the benchmark checks it agrees with the
+   old parser on every row.
+2. **Then the book update.** With parsing fixed, the tree update became the top
+   cost, so `FastOrderBook` keeps the dense near-touch region in flat,
+   tick-indexed arrays (O(1), cache-friendly) with a `std::map` fallback for
+   deep levels. The win is modest (~1.6x) because BTC's near book is small
+   enough that the tree stays cache-warm too — it would widen on a thicker book
+   or a higher event rate.
+
+The array book is only trustworthy because a **differential test** replays a
+real capture through both books and asserts identical top-of-book, imbalance,
+and microprice after every event (`test_fast_order_book`). An optimization you
+can't prove is behavior-preserving is a bug waiting to happen.
 
 ## Layout
 
@@ -168,9 +180,10 @@ Next, in order:
   instrument where the spread is economically meaningful.
 - **Live dashboard** — a thin web view of the reconstructed book: depth chart,
   spread, and per-event processing latency.
-- **Book-update latency** — now the measured bottleneck (see Performance).
-  Attack it with a flat array over the dense near-touch price region, keeping
-  the `std::map` only for the sparse tail, and re-measure.
+- **Deeper latency work** — the flat-array book (~1.6x) is a first cut; a
+  ring-buffer window that re-bases as the touch drifts, and cache-line-aware
+  packing, would push it further. Add per-op percentile timing (p50/p99), not
+  just averages.
 
 ## Known limitations
 
