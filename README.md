@@ -32,6 +32,11 @@ fast enough to keep up.
   book-update cost, a `from_chars` parser (~5.5x on parsing), and a flat-array
   `FastOrderBook` (~1.6x on updates) validated by a differential test against
   the reference. See [Performance](#performance).
+- **v6 — dashboard** (done): a self-contained HTML page (no server, no
+  libraries) that replays a captured session — animated depth ladder, mid /
+  microprice with trades, spread, and imbalance. See [dashboard/](dashboard/).
+
+![dashboard preview](dashboard/dashboard_preview.png)
 
 See the [Roadmap](#roadmap) for what these versions deliberately do *not* do yet.
 
@@ -129,7 +134,7 @@ engine/     C++ order book, replay CLI, feature + event emit, benchmark, tests
 data/       Python live-feed capture (book + trades) + CSV contract + samples
 backtest/   Python taker signal backtester + passive market-maker + metrics
 ml/         mid-price direction classifier, walk-forward evaluated
-dashboard/  (roadmap) live depth + spread + latency view
+dashboard/  self-contained HTML dashboard (depth ladder + signals + trades)
 ```
 
 ## Build and run
@@ -170,20 +175,20 @@ python backtest/backtest.py data/features.csv --signal imb1 --plot equity.png
 
 ## Roadmap
 
-Done: the reconstruction core (v1), the taker signal backtester (v2), the
-walk-forward ML classifier (v3), and the passive market-making backtest (v4).
-Next, in order:
+Done: reconstruction core (v1), taker backtester (v2), walk-forward ML
+classifier (v3), passive market-making backtest (v4), performance work (v5),
+and the dashboard (v6). Directions that would deepen it further:
 
 - **Better market-making study** — the v4 result showed BTC-USD's penny spread
   is too thin to evaluate spread capture. Extend with inventory-skewed quoting,
   a longer horizon so inventory noise averages out, and a wider-spread
   instrument where the spread is economically meaningful.
-- **Live dashboard** — a thin web view of the reconstructed book: depth chart,
-  spread, and per-event processing latency.
 - **Deeper latency work** — the flat-array book (~1.6x) is a first cut; a
   ring-buffer window that re-bases as the touch drifts, and cache-line-aware
   packing, would push it further. Add per-op percentile timing (p50/p99), not
   just averages.
+- **Live in-process path** — collapse capture→replay into a single process
+  reading the socket straight into the book, and stream the dashboard live.
 
 ## Known limitations
 

@@ -26,6 +26,9 @@ struct Args {
     std::size_t print_every = 500;
     std::string emit_path;         // empty = no per-event feature dump
     std::string emit_events_path;  // empty = no unified quote+trade stream
+    std::string emit_depth_path;   // empty = no depth-ladder snapshots
+    std::size_t depth_levels = 12;
+    std::size_t depth_every = 1000;
 };
 
 Args parse_args(int argc, char** argv) {
@@ -47,6 +50,12 @@ Args parse_args(int argc, char** argv) {
             args.emit_path = argv[++i];
         } else if (std::strcmp(argv[i], "--emit-events") == 0 && i + 1 < argc) {
             args.emit_events_path = argv[++i];
+        } else if (std::strcmp(argv[i], "--emit-depth") == 0 && i + 1 < argc) {
+            args.emit_depth_path = argv[++i];
+        } else if (std::strcmp(argv[i], "--depth-levels") == 0 && i + 1 < argc) {
+            args.depth_levels = static_cast<std::size_t>(std::atoi(argv[++i]));
+        } else if (std::strcmp(argv[i], "--depth-every") == 0 && i + 1 < argc) {
+            args.depth_every = static_cast<std::size_t>(std::atoi(argv[++i]));
         }
     }
     return args;
@@ -91,6 +100,20 @@ int main(int argc, char** argv) {
         emit_events << std::setprecision(12);
         emit_events << "event_type,ts_ns,best_bid,best_ask,bid_size,ask_size,"
                        "trade_price,trade_size,trade_side\n";
+    }
+
+    // Optional periodic depth-ladder snapshots for the dashboard.
+    std::ofstream emit_depth;
+    std::size_t depth_snaps = 0;
+    if (!args.emit_depth_path.empty()) {
+        emit_depth.open(args.emit_depth_path);
+        if (!emit_depth.is_open()) {
+            std::fprintf(stderr, "could not open emit-depth path '%s'\n",
+                         args.emit_depth_path.c_str());
+            return 1;
+        }
+        emit_depth << std::setprecision(12);
+        emit_depth << "snap,ts_ns,side,rank,price,size\n";
     }
 
     OrderBook book;
@@ -175,6 +198,24 @@ int main(int argc, char** argv) {
             }
         }
 
+        // Periodic depth-ladder snapshot (dashboard input).
+        if (emit_depth.is_open() && is_update && update_rows % args.depth_every == 0) {
+            auto top = book.top_of_book();
+            if (top.has_bid && top.has_ask) {
+                auto bids = book.top_bids(args.depth_levels);
+                auto asks = book.top_asks(args.depth_levels);
+                for (std::size_t k = 0; k < bids.size(); ++k) {
+                    emit_depth << depth_snaps << ',' << ts_ns << ",b," << k << ','
+                               << bids[k].price << ',' << bids[k].size << '\n';
+                }
+                for (std::size_t k = 0; k < asks.size(); ++k) {
+                    emit_depth << depth_snaps << ',' << ts_ns << ",a," << k << ','
+                               << asks[k].price << ',' << asks[k].size << '\n';
+                }
+                ++depth_snaps;
+            }
+        }
+
         ++rows;
         if (args.print_every > 0 && rows % args.print_every == 0) {
             auto top = book.top_of_book();
@@ -204,6 +245,10 @@ int main(int argc, char** argv) {
     if (emit_events.is_open()) {
         std::printf("emitted %zu quote+trade events to %s\n", events_emitted,
                     args.emit_events_path.c_str());
+    }
+    if (emit_depth.is_open()) {
+        std::printf("emitted %zu depth snapshots to %s\n", depth_snaps,
+                    args.emit_depth_path.c_str());
     }
     return 0;
 }

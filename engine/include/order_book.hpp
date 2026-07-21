@@ -58,6 +58,11 @@ public:
     std::size_t bid_levels() const { return bids_.size(); }
     std::size_t ask_levels() const { return asks_.size(); }
 
+    // The best `n` levels on each side, best price first. Used to emit depth
+    // snapshots for the dashboard.
+    std::vector<Level> top_bids(std::size_t n) const;
+    std::vector<Level> top_asks(std::size_t n) const;
+
 private:
     // std::greater orders bids descending (best bid first).
     std::map<double, double, std::greater<double>> bids_;

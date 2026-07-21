@@ -14,6 +14,7 @@ data/*.csv
 !data/features_sample.csv
 !data/features_ml_sample.csv
 !data/events_sample.csv
+!data/depth_sample.csv
 
 # Python
 __pycache__/

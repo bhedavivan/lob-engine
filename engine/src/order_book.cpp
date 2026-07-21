@@ -68,6 +68,24 @@ double OrderBook::imbalance(std::size_t depth) const {
     return (bd - ad) / denom;
 }
 
+std::vector<Level> OrderBook::top_bids(std::size_t n) const {
+    std::vector<Level> out;
+    out.reserve(n);
+    for (auto it = bids_.begin(); it != bids_.end() && out.size() < n; ++it) {
+        out.push_back(Level{it->first, it->second});
+    }
+    return out;
+}
+
+std::vector<Level> OrderBook::top_asks(std::size_t n) const {
+    std::vector<Level> out;
+    out.reserve(n);
+    for (auto it = asks_.begin(); it != asks_.end() && out.size() < n; ++it) {
+        out.push_back(Level{it->first, it->second});
+    }
+    return out;
+}
+
 double OrderBook::microprice() const {
     TopOfBook top = top_of_book();
     if (!top.has_bid && !top.has_ask) return 0.0;
