@@ -151,6 +151,7 @@ data/       multi-exchange live-feed capture (Coinbase/Kraken) + CSV contract
 backtest/   Python taker signal backtester + passive market-maker + metrics
 ml/         mid-price direction classifier, walk-forward evaluated
 dashboard/  live browser dashboard (3 exchanges) + replay dashboard
+tests/      pytest suite (feed adapters, backtest math, walk-forward purge)
 ```
 
 ## Build and run
@@ -182,6 +183,13 @@ Backtest the imbalance signal on the committed feature sample:
 cd backtest
 pip install -r requirements.txt
 python backtest.py ../data/features_sample.csv --signal imb1 --horizon 50 --threshold 0.30
+```
+
+Python correctness tests (feed adapters, backtest/MM math, walk-forward purge):
+
+```bash
+pip install -r backtest/requirements.txt -r ml/requirements.txt -r tests/requirements.txt
+pytest tests/ -q
 ```
 
 Full pipeline on a fresh capture:

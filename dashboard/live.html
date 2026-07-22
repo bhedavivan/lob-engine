@@ -131,17 +131,22 @@ const EXCHANGES = {
     onMsg(raw,bk,onTrade){
       const m=JSON.parse(raw);
       if(!Array.isArray(m)) return;                 // skip heartbeat/status dicts
-      const chan=m[m.length-2], payload=m[1];
+      const chan=m[m.length-2];
       if(typeof chan==="string" && chan.startsWith("book")){
-        if(payload.as||payload.bs){                 // snapshot
-          bk.bids.clear(); bk.asks.clear();
-          (payload.bs||[]).forEach(e=>bk.bids.set(+e[0],+e[1]));
-          (payload.as||[]).forEach(e=>bk.asks.set(+e[0],+e[1]));
+        // A combined bid+ask update can span two payload dicts, so merge all
+        // dicts between the channel id and the channel name.
+        for(const payload of m.slice(1,-2)){
+          if(typeof payload!=="object"||Array.isArray(payload)) continue;
+          if(payload.as||payload.bs){               // snapshot
+            bk.bids.clear(); bk.asks.clear();
+            (payload.bs||[]).forEach(e=>bk.bids.set(+e[0],+e[1]));
+            (payload.as||[]).forEach(e=>bk.asks.set(+e[0],+e[1]));
+          }
+          (payload.b||[]).forEach(e=>setLevel(bk.bids,+e[0],+e[1]));
+          (payload.a||[]).forEach(e=>setLevel(bk.asks,+e[0],+e[1]));
         }
-        (payload.b||[]).forEach(e=>setLevel(bk.bids,+e[0],+e[1]));
-        (payload.a||[]).forEach(e=>setLevel(bk.asks,+e[0],+e[1]));
       } else if(chan==="trade"){
-        for(const t of payload) onTrade(+t[0], t[3]==="b"?"buy":"sell");
+        for(const t of m[1]) onTrade(+t[0], t[3]==="b"?"buy":"sell");
       }
     }
   },

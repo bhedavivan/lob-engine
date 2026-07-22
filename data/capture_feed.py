@@ -20,14 +20,6 @@ import json
 import sys
 import time
 
-try:
-    from websocket import create_connection  # websocket-client
-except ImportError:
-    sys.exit(
-        "websocket-client is required: pip install websocket-client\n"
-        "(see data/requirements.txt)"
-    )
-
 # Canonical symbol -> per-exchange symbol.
 SYMBOLS = {
     "BTC-USD": {"coinbase": "BTC-USD", "kraken": "XBT/USD"},
@@ -90,20 +82,25 @@ class Kraken:
                 print(f"feed error: {msg['errorMessage']}", file=sys.stderr)
             return [], False
         channel = msg[-2]
-        payload = msg[1]
         if isinstance(channel, str) and channel.startswith("book"):
             out, is_snap = [], False
-            if "as" in payload or "bs" in payload:      # snapshot
-                is_snap = True
-                out += [("snapshot", "b", e[0], e[1]) for e in payload.get("bs", [])]
-                out += [("snapshot", "a", e[0], e[1]) for e in payload.get("as", [])]
-            out += [("update", "b", e[0], e[1]) for e in payload.get("b", [])]
-            out += [("update", "a", e[0], e[1]) for e in payload.get("a", [])]
+            # A combined bid+ask update can arrive as two separate payload dicts
+            # between the channel id and the channel name, so merge them all
+            # rather than reading only msg[1].
+            for payload in msg[1:-2]:
+                if not isinstance(payload, dict):
+                    continue
+                if "as" in payload or "bs" in payload:  # snapshot
+                    is_snap = True
+                    out += [("snapshot", "b", e[0], e[1]) for e in payload.get("bs", [])]
+                    out += [("snapshot", "a", e[0], e[1]) for e in payload.get("as", [])]
+                out += [("update", "b", e[0], e[1]) for e in payload.get("b", [])]
+                out += [("update", "a", e[0], e[1]) for e in payload.get("a", [])]
             return out, is_snap
         if channel == "trade":
             # Kraken trade `side` is the *aggressor*: b => a buy lifted the ask
             # (ask consumed), s => a sell hit the bid (bid consumed).
-            return ([("trade", "a" if t[3] == "b" else "b", t[0], t[1]) for t in payload], False)
+            return ([("trade", "a" if t[3] == "b" else "b", t[0], t[1]) for t in msg[1]], False)
         return [], False
 
 
@@ -111,6 +108,14 @@ ADAPTERS = {"coinbase": Coinbase, "kraken": Kraken}
 
 
 def capture(exchange: str, symbol: str, seconds: float, out_path: str, stream: bool) -> None:
+    # Imported lazily so the pure adapter classes (Coinbase/Kraken) can be
+    # imported and unit-tested without the network dependency installed.
+    try:
+        from websocket import create_connection  # websocket-client
+    except ImportError:
+        sys.exit("websocket-client is required: pip install websocket-client "
+                 "(see data/requirements.txt)")
+
     adapter = ADAPTERS[exchange]
     ex_symbol = SYMBOLS[symbol][exchange]
 

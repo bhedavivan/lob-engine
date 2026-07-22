@@ -24,7 +24,7 @@ jobs:
         run: ctest --test-dir engine/build --output-on-failure -C Release
 
   python:
-    name: Python research layer (smoke)
+    name: Python tests & smoke
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,12 +32,14 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install deps
-        run: pip install -r backtest/requirements.txt -r ml/requirements.txt
-      - name: Backtest (taker + market maker)
+        run: pip install -r backtest/requirements.txt -r ml/requirements.txt -r tests/requirements.txt
+      - name: Unit tests (pytest)
+        run: pytest tests/ -q
+      - name: Backtest smoke (taker + market maker)
         run: |
           python backtest/backtest.py data/features_sample.csv --signal imb1 --horizon 50
           python backtest/market_maker.py data/events_sample.csv --qty 0.1 --inv-cap 1.0
-      - name: ML walk-forward
+      - name: ML walk-forward smoke
         run: python ml/train.py data/features_ml_sample.csv --horizon 50 --folds 3
       - name: Dashboard build
         run: |
