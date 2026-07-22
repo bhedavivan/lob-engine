@@ -1,9 +1,15 @@
 // Replays a captured L2 order book feed (see data/README.md for the CSV
 // contract) through OrderBook and prints live top-of-book / imbalance.
-// With --emit, also writes a per-event microstructure feature stream that
-// the Python backtester (backtest/) consumes.
+// A path of "-" reads the feed live from stdin instead of a file.
 //
-// Usage: lob_engine <path-to-csv> [--depth N] [--every N] [--emit <out.csv>]
+// Optional outputs, each written in one pass over the same replay:
+//   --emit <csv>         per-event microstructure feature stream (backtest/)
+//   --emit-events <csv>  unified quote+trade stream (market-making sim)
+//   --emit-depth <csv>   periodic depth-ladder snapshots (dashboard/)
+//
+// Usage: lob_engine <path-to-csv|-> [--depth N] [--every N] [--emit <csv>]
+//        [--emit-events <csv>] [--emit-depth <csv>] [--depth-levels N]
+//        [--depth-every N]
 
 #include <chrono>
 #include <cstdio>
@@ -32,32 +38,46 @@ struct Args {
     std::size_t depth_every = 1000;
 };
 
+[[noreturn]] void usage_and_exit(const char* prog, int code) {
+    std::fprintf(stderr,
+                 "usage: %s <path-to-csv|-> [--depth N] [--every N] [--emit <csv>]\n"
+                 "       [--emit-events <csv>] [--emit-depth <csv>] [--depth-levels N]\n"
+                 "       [--depth-every N]\n"
+                 "  '-' as the path reads the feed live from stdin\n",
+                 prog);
+    std::exit(code);
+}
+
 Args parse_args(int argc, char** argv) {
     Args args;
-    if (argc < 2) {
-        std::fprintf(stderr,
-                     "usage: %s <path-to-csv|-> [--depth N] [--every N] [--emit <out.csv>] "
-                     "[--emit-events <out.csv>] [--emit-depth <out.csv>]\n"
-                     "  '-' reads the feed live from stdin\n",
-                     argv[0]);
-        std::exit(1);
-    }
+    if (argc < 2) usage_and_exit(argv[0], 1);
     args.path = argv[1];
+
+    // Consume the value that must follow a flag, or fail loudly rather than
+    // silently ignoring a misused option.
+    auto value_for = [&](int& i) -> const char* {
+        if (i + 1 >= argc) {
+            std::fprintf(stderr, "error: %s requires a value\n", argv[i]);
+            usage_and_exit(argv[0], 1);
+        }
+        return argv[++i];
+    };
+    auto to_size = [](const char* s) {
+        return static_cast<std::size_t>(std::strtoull(s, nullptr, 10));
+    };
+
     for (int i = 2; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--depth") == 0 && i + 1 < argc) {
-            args.depth = static_cast<std::size_t>(std::atoi(argv[++i]));
-        } else if (std::strcmp(argv[i], "--every") == 0 && i + 1 < argc) {
-            args.print_every = static_cast<std::size_t>(std::atoi(argv[++i]));
-        } else if (std::strcmp(argv[i], "--emit") == 0 && i + 1 < argc) {
-            args.emit_path = argv[++i];
-        } else if (std::strcmp(argv[i], "--emit-events") == 0 && i + 1 < argc) {
-            args.emit_events_path = argv[++i];
-        } else if (std::strcmp(argv[i], "--emit-depth") == 0 && i + 1 < argc) {
-            args.emit_depth_path = argv[++i];
-        } else if (std::strcmp(argv[i], "--depth-levels") == 0 && i + 1 < argc) {
-            args.depth_levels = static_cast<std::size_t>(std::atoi(argv[++i]));
-        } else if (std::strcmp(argv[i], "--depth-every") == 0 && i + 1 < argc) {
-            args.depth_every = static_cast<std::size_t>(std::atoi(argv[++i]));
+        std::string_view arg = argv[i];
+        if (arg == "--depth") args.depth = to_size(value_for(i));
+        else if (arg == "--every") args.print_every = to_size(value_for(i));
+        else if (arg == "--emit") args.emit_path = value_for(i);
+        else if (arg == "--emit-events") args.emit_events_path = value_for(i);
+        else if (arg == "--emit-depth") args.emit_depth_path = value_for(i);
+        else if (arg == "--depth-levels") args.depth_levels = to_size(value_for(i));
+        else if (arg == "--depth-every") args.depth_every = to_size(value_for(i));
+        else {
+            std::fprintf(stderr, "error: unknown argument '%s'\n", argv[i]);
+            usage_and_exit(argv[0], 1);
         }
     }
     return args;
@@ -208,8 +228,10 @@ int main(int argc, char** argv) {
             }
         }
 
-        // Periodic depth-ladder snapshot (dashboard input).
-        if (emit_depth.is_open() && is_update && update_rows % args.depth_every == 0) {
+        // Periodic depth-ladder snapshot (dashboard input). The depth_every > 0
+        // guard keeps a `--depth-every 0` from dividing by zero.
+        if (emit_depth.is_open() && is_update && args.depth_every > 0 &&
+            update_rows % args.depth_every == 0) {
             auto top = book.top_of_book();
             if (top.has_bid && top.has_ask) {
                 auto bids = book.top_bids(args.depth_levels);

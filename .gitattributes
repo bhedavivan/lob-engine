@@ -1,0 +1,5 @@
+# Normalize all text to LF in the repo and on checkout, so the C++/Python
+# sources and CSV samples are byte-identical across Linux, macOS, and Windows
+# (and CI on all three). Binary assets are left untouched.
+* text=auto eol=lf
+*.png binary
