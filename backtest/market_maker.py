@@ -176,6 +176,17 @@ def fmt(x, nd=2):
     return "nan" if x != x else f"{x:.{nd}f}"
 
 
+# Shared dark theme so every generated chart matches the dashboards.
+def _dark(plt):
+    plt.rcParams.update({
+        "figure.facecolor": "#06080c", "axes.facecolor": "#0b0e14",
+        "axes.edgecolor": "#1f2630", "text.color": "#e9edf4",
+        "axes.labelcolor": "#6d7686", "xtick.color": "#6d7686",
+        "ytick.color": "#6d7686", "axes.titlecolor": "#e9edf4",
+        "font.size": 9, "grid.color": "#1f2630",
+    })
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("events")
@@ -221,17 +232,18 @@ def main() -> None:
         except ImportError:
             print("matplotlib not installed; skipping plot", file=sys.stderr)
         else:
+            _dark(plt)
             fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
-            ax1.plot(r["equity"], lw=1.0)
-            ax1.axhline(0, color="k", lw=0.6, alpha=0.5)
+            ax1.plot(r["equity"], lw=1.3, color="#f0a63a")
+            ax1.axhline(0, color="#6d7686", lw=0.6, alpha=0.6)
             ax1.set_ylabel("PnL (price points)")
             ax1.set_title(f"Passive MM — qty={args.qty}, inv cap={args.inv_cap}")
-            ax2.plot(r["inventory"], lw=1.0, color="tab:orange")
-            ax2.axhline(0, color="k", lw=0.6, alpha=0.5)
+            ax2.plot(r["inventory"], lw=1.3, color="#8b8ff5")
+            ax2.axhline(0, color="#6d7686", lw=0.6, alpha=0.6)
             ax2.set_ylabel("inventory")
             ax2.set_xlabel("event")
             fig.tight_layout()
-            fig.savefig(args.plot, dpi=110)
+            fig.savefig(args.plot, dpi=110, facecolor="#06080c")
             print(f"\nwrote plot -> {args.plot}")
 
 

@@ -36,6 +36,17 @@ except ImportError:
     sys.exit("pandas is required: pip install -r requirements.txt")
 
 
+# Shared dark theme so every generated chart matches the dashboards.
+def _dark(plt):
+    plt.rcParams.update({
+        "figure.facecolor": "#06080c", "axes.facecolor": "#0b0e14",
+        "axes.edgecolor": "#1f2630", "text.color": "#e9edf4",
+        "axes.labelcolor": "#6d7686", "xtick.color": "#6d7686",
+        "ytick.color": "#6d7686", "axes.titlecolor": "#e9edf4",
+        "font.size": 9, "grid.color": "#1f2630",
+    })
+
+
 def load_features(path: str) -> pd.DataFrame:
     df = pd.read_csv(path)
     # Deep-book updates emit an event even when the top of book is unchanged,
@@ -227,15 +238,16 @@ def main() -> None:
         except ImportError:
             print("matplotlib not installed; skipping plot", file=sys.stderr)
         else:
+            _dark(plt)
             fig, ax = plt.subplots(figsize=(10, 4))
-            ax.plot(res["equity"], lw=1.0)
-            ax.axhline(0, color="k", lw=0.6, alpha=0.5)
+            ax.plot(res["equity"], lw=1.3, color="#f0a63a")
+            ax.axhline(0, color="#6d7686", lw=0.6, alpha=0.6)
             ax.set_title(f"Equity curve — {args.signal}, thr={args.threshold}, "
                          f"fee={args.fee_bps}bps")
             ax.set_xlabel("event")
             ax.set_ylabel("PnL (price points)")
             fig.tight_layout()
-            fig.savefig(args.plot, dpi=110)
+            fig.savefig(args.plot, dpi=110, facecolor="#06080c")
             print(f"wrote plot -> {args.plot}")
 
 

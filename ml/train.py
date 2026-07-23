@@ -208,15 +208,22 @@ def main() -> None:
         except ImportError:
             print("matplotlib not installed; skipping plot", file=sys.stderr)
         else:
+            plt.rcParams.update({
+                "figure.facecolor": "#06080c", "axes.facecolor": "#0b0e14",
+                "axes.edgecolor": "#1f2630", "text.color": "#e9edf4",
+                "axes.labelcolor": "#6d7686", "xtick.color": "#6d7686",
+                "ytick.color": "#6d7686", "axes.titlecolor": "#e9edf4",
+                "font.size": 9,
+            })
             pairs = sorted(zip(FEATURE_COLS, res["importance"]), key=lambda t: t[1])
             names = [p[0] for p in pairs]
             vals = [p[1] for p in pairs]
             fig, ax = plt.subplots(figsize=(8, 4))
-            ax.barh(names, vals)
+            ax.barh(names, vals, color="#3fd0c9")
             ax.set_title(f"GBT feature importance (horizon={args.horizon})")
             ax.set_xlabel("out-of-sample accuracy drop when shuffled")
             fig.tight_layout()
-            fig.savefig(args.plot, dpi=110)
+            fig.savefig(args.plot, dpi=110, facecolor="#06080c")
             print(f"\nwrote plot -> {args.plot}")
 
 
