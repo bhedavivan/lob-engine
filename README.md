@@ -52,7 +52,7 @@ byte-for-byte identical to a plain reference implementation.
   exchange + coin selector. [`dashboard/live.html`](dashboard/) connects
   straight from the browser and reconstructs any of six coins live.
 
-![dashboard preview](dashboard/dashboard_preview.png)
+![lob-engine live order book dashboard](dashboard/live_dashboard.png)
 
 See the [Roadmap](#roadmap) for what these versions deliberately do *not* do yet.
 

@@ -1,33 +1,30 @@
 # Dashboard
 
-Two self-contained HTML pages, no server and no external libraries:
+Two self-contained HTML pages that share one design, no server and no external
+libraries.
 
-- **`live.html`** — a **live** order book you can actually use. Pick an exchange
-  (Coinbase, Kraken, Binance.US) and a coin (BTC, ETH, SOL, XRP, LTC, DOGE) and
-  it connects straight from the browser to that exchange's public market-data
-  WebSocket, reconstructs the book in real time, and shows a depth ladder, best
-  bid/ask/spread, order-flow imbalance, a mid-price sparkline, and a trade tape.
-  No API key. Open the file and it auto-connects to Coinbase BTC.
-- **`dashboard.html`** — a **replay** of a captured session, built from the C++
-  engine's emitted streams (below). The reconstruction logic in `live.html` is
-  the browser twin of the C++ engine — the engine is the fast, unit-tested
-  version that feeds the backtests and ML.
+## `live.html` — live order book
 
-Because two venues are a click apart, you can watch the same coin on Coinbase
-and Kraken side by side and see their prices differ — the simplest form of
-cross-source sanity checking.
+Pick an exchange (Coinbase, Kraken, Binance.US) and a coin (BTC, ETH, SOL, XRP,
+LTC, DOGE) and it connects straight from the browser to that exchange's public
+market-data WebSocket, reconstructs the book in real time, and shows a depth
+ladder, best bid/ask/spread with per-tick price flashes, order-flow imbalance, a
+mid-price sparkline, and a trade tape. No API key; auto-connects to Coinbase BTC.
+Because two venues are a click apart, you can watch the same coin on Coinbase and
+Kraken and see their prices differ — the simplest cross-source sanity check.
 
-## Replay dashboard
+![live order book dashboard](live_dashboard.png)
 
-`dashboard.html` visualizes a real captured session: an animated order-book
-**depth ladder**, **mid / microprice** with trade prints, the **spread**, and
-the **order-book imbalance** signal — with a cursor tying the time series to the
-depth snapshot on screen. All data is inlined, so it opens straight from disk.
+## `dashboard.html` — replay
 
-![dashboard preview](dashboard_preview.png)
+A **replay** of a captured session, built from the C++ engine's emitted streams:
+an animated depth ladder, mid / microprice with trade prints, spread, and
+order-book imbalance, with a cursor tying the time series to the depth snapshot
+on screen. All data is inlined, so it opens straight from disk. The
+reconstruction logic in `live.html` is the browser twin of the C++ engine — the
+engine is the fast, unit-tested version that feeds the backtests and ML.
 
-*(Static poster above; `dashboard.html` is interactive — press Play or drag the
-slider to scrub through the session.)*
+![replay dashboard](replay_dashboard.png)
 
 ## How it's built
 
@@ -54,13 +51,14 @@ python ../data/capture_feed.py --product BTC-USD --seconds 180 --out ../data/fee
 # 2) build the page (open the result in any browser):
 python build_dashboard.py --depth ../data/depth.csv \
     --features ../data/feat.csv --events ../data/ev.csv --out dashboard.html
-
-# static PNG poster (what the README shows):
-python preview.py --depth ../data/depth.csv \
-    --features ../data/feat.csv --events ../data/ev.csv --out dashboard_preview.png
 ```
 
-`preview.py` needs `matplotlib`; `build_dashboard.py` is pure standard library.
-A committed `dashboard.html` is included so the interactive view is viewable
-without capturing anything, and `../data/depth_sample.csv` is a real depth
-sample for quick experiments.
+`build_dashboard.py` is pure standard library. A committed `dashboard.html` is
+included so the interactive view is viewable without capturing anything, and
+`../data/depth_sample.csv` is a real depth sample for quick experiments.
+
+The `live_dashboard.png` cover is a real screenshot of `live.html`, reproducible
+from the committed samples: `python capture_cover.py` seeds `live.html` with a
+captured snapshot (WebSocket disabled) into `_hero.html`, which any headless
+Chromium can then screenshot (`msedge/chrome --headless=new --screenshot=...
+_hero.html`).
